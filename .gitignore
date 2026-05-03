@@ -1,4 +1,6 @@
 .DS_Store
+serverPro.py
+monitor_history.json
 __pycache__/
 *.pyc
 *.kla
