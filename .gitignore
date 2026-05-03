@@ -1,5 +1,5 @@
 .DS_Store
-serverPro.py
+ServerPro/
 monitor_history.json
 __pycache__/
 *.pyc

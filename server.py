@@ -171,20 +171,20 @@ def build_forecast(data: dict) -> str:
     lines = [
         "5-DAY FORECAST",
         "-" * 38,
-        f"{'DATE':<11} {'MIN':>3} {'MAX':>3} {'RAIN':>4} {'SUN':>3} {'WIND'}",
+        f"{'DATE':<10}{'MIN':>5}  {'MAX':>5}  {'RAIN':>4}  {'SUN':>4}  {'WIND'}",
     ]
 
     for d in days:
         date_str  = format_date(d.get("day", ""))
-        min_t     = d.get("mintemperature", "?")
-        max_t     = d.get("maxtemperature", "?")
-        rain_pct  = d.get("rainChance", "?")
-        sun_pct   = d.get("sunChance", "?")
+        min_t     = str(d.get("mintemperature", "?"))
+        max_t     = str(d.get("maxtemperature", "?"))
+        rain_str  = f"{d.get('rainChance', '?')}%"
+        sun_str   = f"{d.get('sunChance',  '?')}%"
         wind_bft  = d.get("wind", "?")
         wind_dir  = d.get("windDirection", "?").upper()
         lines.append(
-            f"{date_str:<11} {min_t:>3} {max_t:>3} {rain_pct:>3}% {sun_pct:>3}%"
-            f" {wind_dir}{wind_bft}"
+            f"{date_str:<10}{min_t:>5}  {max_t:>5}  {rain_str:>4}  {sun_str:>4}"
+            f"  {wind_dir}{wind_bft}"
         )
 
     lines.append("")

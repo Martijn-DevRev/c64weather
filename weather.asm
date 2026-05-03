@@ -1496,9 +1496,7 @@ page_radar:
         lda #0
         sta $D010
         sta $D015               // sprites off
-        lda $D011
-        ora #$10                // enable display
-        sta $D011
+        // display stays blank until first frame is flipped in (pr_flip_frame re-enables it)
 
         // ── 2. Frame loop ─────────────────────────────────────────────────
 pr_frame:
@@ -1769,6 +1767,10 @@ pr_cd:  sta $D800,x
         // ── Background: $C800[0] → $D021 ──
         lda $C800
         sta $D021
+        // Re-enable display (no-op on frames 2+; blanked until now on frame 1)
+        lda $D011
+        ora #$10
+        sta $D011
         rts
 
 pr_done:
