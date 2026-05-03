@@ -16,7 +16,9 @@ Requires
 """
 
 import argparse
+import base64
 import collections
+import hmac
 import json
 import logging
 import sys
@@ -40,6 +42,14 @@ from server import (
 )
 
 DEFAULT_PORT = 8064
+
+# Credentials for the /monitor dashboard (HTTP Basic Auth).
+# Username is always "monitor"; change the password here if needed.
+_MONITOR_USER = "monitor"
+_MONITOR_PASS = "DihwvdsBuienradar2026!"
+_MONITOR_TOKEN = base64.b64encode(
+    f"{_MONITOR_USER}:{_MONITOR_PASS}".encode()
+).decode()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -453,6 +463,30 @@ class WeatherHandlerPro(_BaseHandler):
         self._resp_status = status
         super().send_binary(data, status)
 
+    # ── HTTP Basic Auth for /monitor ────────────────────────────────────────
+
+    def _check_monitor_auth(self) -> bool:
+        """Return True if the request carries valid Basic Auth credentials.
+
+        Sends a 401 challenge and returns False if credentials are absent or
+        wrong.  Uses hmac.compare_digest to prevent timing-based attacks.
+        """
+        header = self.headers.get("Authorization", "")
+        if header.startswith("Basic "):
+            provided = header[len("Basic "):].strip()
+            if hmac.compare_digest(provided, _MONITOR_TOKEN):
+                return True
+        # Challenge the browser
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="C64U Monitor"')
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Content-Length", "13")
+        self.end_headers()
+        self.wfile.write(b"Unauthorized\n")
+        self._resp_status = 401
+        self._resp_bytes  += 13
+        return False
+
     # ── main GET dispatcher ─────────────────────────────────────────────────
 
     def do_GET(self):
@@ -462,9 +496,11 @@ class WeatherHandlerPro(_BaseHandler):
         path = self.path.split("?")[0].rstrip("/") or "/"
 
         if path == "/monitor":
-            self._serve_monitor_page()
+            if self._check_monitor_auth():
+                self._serve_monitor_page()
         elif path == "/monitor/stats":
-            self._serve_monitor_stats()
+            if self._check_monitor_auth():
+                self._serve_monitor_stats()
         else:
             super().do_GET()
 
