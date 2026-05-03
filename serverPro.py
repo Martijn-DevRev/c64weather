@@ -74,7 +74,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 MAX_RECENT   = 200   # ring buffer depth for recent requests
-ACTIVE_SECS  = 300   # an IP is "active" if seen within this many seconds
+ACTIVE_SECS  = 600   # an IP is "active" if seen within this many seconds (10 min)
 
 
 class _IPStats:
@@ -379,13 +379,14 @@ function update(data) {
       .join(' ');
   }
 
-  // clients table
+  // clients table — only show IPs active within the last 10 minutes
   $('clients-badge').textContent = active + ' active';
   const cb = $('clients-body');
-  if (!data.active_ips.length) {
-    cb.innerHTML = '<tr><td colspan="6" class="empty">No clients yet</td></tr>';
+  const visible = data.active_ips.filter(s => s.active);
+  if (!visible.length) {
+    cb.innerHTML = '<tr><td colspan="6" class="empty">No active clients</td></tr>';
   } else {
-    cb.innerHTML = data.active_ips.map(s => {
+    cb.innerHTML = visible.map(s => {
       const dot = `<span class="active-dot ${s.active?'on':'off'}"></span>`;
       const eps = Object.entries(s.all_endpoints||{})
         .sort((a,b)=>b[1]-a[1])
