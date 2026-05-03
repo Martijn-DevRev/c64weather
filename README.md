@@ -12,7 +12,7 @@ A live weather display program for the **Commodore 64 Ultimate**, leveraging the
 - **Current conditions** — live temperature, humidity, wind, precipitation, pressure, visibility
 - **5-day forecast** — min/max temp, rain chance, sun hours, wind direction and Beaufort scale
 - **Weather report** — full-text bulletin from Buienradar, paginated across screens
-- **Temperature map** — Netherlands outline in VIC-II multicolour bitmap mode with hardware sprites showing city temperatures (Groningen, Amsterdam, Utrecht, Rotterdam, Maastricht)
+- **Temperature map** — Netherlands outline in VIC-II multicolour bitmap mode with hardware sprites for six cities (Utrecht, Maastricht, Den Helder, Groningen, Vlissingen, Twente). Sprites alternate every 3 seconds between the current temperature and a weather-state icon (sun, partly cloudy, cloudy, fog, rain, snow, thunder, moon at night)
 - **Animated radar** — multi-frame rain-radar slideshow fetched from the proxy, shown with frame timestamps as sprites
 - **Auto-cycle mode** — hands-free carousel through all screens
 
@@ -162,7 +162,10 @@ Full-text weather bulletin from Buienradar, word-wrapped to 38 columns. If the r
 
 ![Temperature map](screenshots/4.map.png)
 
-The Netherlands rendered in VIC-II multicolour bitmap mode. Hardware sprites overlay the current temperature for six weather stations: Utrecht, Maastricht, Den Helder, Groningen, Vlissingen, and Twente. Sprite digit bitmaps are built at runtime from a built-in 5×7 pixel font.
+The Netherlands rendered in VIC-II multicolour bitmap mode. Hardware sprites overlay six weather stations: Utrecht, Maastricht, Den Helder, Groningen, Vlissingen, and Twente. Each sprite alternates every 3 seconds between two states:
+
+- **Temperature** — current temperature in degrees Celsius, built at runtime from a 5×7 pixel font (negative values get a leading minus sign).
+- **Weather-state icon** — one of eight 24×21 pixel icons representing current conditions: sun, partly cloudy, cloudy, fog, rain, snow, thunder, or moon (used for clear nights). Icons are colourised per type (yellow sun/thunder, white clouds/rain/snow/moon, light grey fog).
 
 ---
 
@@ -200,7 +203,7 @@ All responses are plain ASCII, max 38 characters wide.
 | `GET /current` | Current conditions |
 | `GET /forecast` | 5-day forecast |
 | `GET /report` | Full weather report text |
-| `GET /temps` | Five city temperatures as `CITY:XX\n` lines |
+| `GET /temps` | Six city temperatures and six weather-icon indices for the temperature map |
 | `GET /radar` | Rain-radar frames as a sequence of raw Koala blocks |
 
 ### Example — `/current`
@@ -226,13 +229,24 @@ VISIBIL : 35000.0 M
 
 ### Example — `/temps`
 
+Twelve newline-terminated lines: six signed integer temperatures (city order: Utrecht, Maastricht, Den Helder, Groningen, Vlissingen, Twente) followed by six icon indices (`0`–`7`). The C64 reads the first six as digits for the temperature sprites and the next six as pointers into the weather-icon sprite table.
+
 ```
-GRONINGEN:14
-AMSTERDAM:15
-UTRECHT:16
-ROTTERDAM:14
-MAASTRICHT:16
+16
+17
+14
+13
+15
+16
+2
+4
+0
+1
+2
+7
 ```
+
+Icon indices: `0` sun, `1` partly cloudy, `2` cloudy, `3` fog, `4` rain, `5` snow, `6` thunder, `7` moon (clear at night).
 
 ---
 
@@ -400,12 +414,12 @@ All networking uses **target `$03`**:
 
 #### Temperature map sprites
 
-Each temperature label is a single-colour 24×21 pixel hardware sprite built at runtime by `render_temp_sprite`:
+Six 24×21 pixel hardware sprites overlay the map. Each sprite slot alternates every 3 seconds between two pointers:
 
-- Digits are read from a built-in 5×7 pixel font table
-- A negative-sign prefix is rendered for sub-zero values
-- Sprite data is written to `$5C00–$5D7F` (VIC bank 1); sprite pointers at `$43F8–$43FD`
-- Six stations are mapped to fixed screen positions and sprite slots 0–5: Utrecht, Maastricht, Den Helder, Groningen, Vlissingen, Twente
+- **Temperature labels** — built at runtime by `render_temp_sprite` from a 5×7 pixel digit font (with negative-sign prefix for sub-zero values). Sprite data is written to `$5C00–$5D7F` (VIC bank 1, pointers `$70`–`$75`).
+- **Weather-state icons** — eight pre-rendered 64-byte sprites copied to `$4400–$45FF` at startup (pointers `$10`–`$17`): sun, partly cloudy, cloudy, fog, rain, snow, thunder, moon. Per-icon colours come from the `icon_colors` lookup table and are written to `$D027–$D02C` on each swap.
+
+`pm_check_alt_timer` ticks the C64 jiffy clock (`$A0–$A2`) and `pm_swap_sprites` flips the six sprite pointers and colours between the two states. The active icon for each city is selected from `city_icons[]`, populated from the icon indices returned by the proxy's `/temps` endpoint. Six stations map to fixed screen positions and sprite slots 0–5: Utrecht, Maastricht, Den Helder, Groningen, Vlissingen, Twente.
 
 ---
 

@@ -54,7 +54,11 @@
 //   $4000–$43E7  Screen RAM for multicolour bitmap mode (1000 B)
 //   $43E8–$43F7  (gap — unused)
 //   $43F8–$43FD  Sprite pointers (6 sprites: $70–$75 → sprite data at $5C00–$5D7F)
-//   $4400–$5BFF  (free in VIC bank 1)
+//   $4400–$45FF  Icon sprite data: 8 × 64 B weather icon sprites (copied at runtime)
+//                  Icon 0=$4400($10) sun,  1=$4440($11) partly, 2=$4480($12) cloudy
+//                  Icon 3=$44C0($13) fog,  4=$4500($14) rain,   5=$4540($15) snow
+//                  Icon 6=$4580($16) thunder, 7=$45C0($17) moon
+//   $45C0–$5BFF  (free in VIC bank 1)
 //   $5C00–$5D7F  Sprite data: 6 × 64 B temperature sprites
 //                  Spr 0=$5C00 (ptr=$70), 1=$5C40 ($71), 2=$5C80 ($72)
 //                  Spr 3=$5CC0 ($73),     4=$5D00 ($74), 5=$5D40 ($75)
@@ -1088,9 +1092,11 @@ page_map:
         lda #>path_temps
         sta ZP_PTRH
         jsr do_get
-        bcs pm_wait         // error: show blank map, wait for key
+        bcc pm_fetch_ok
+        jmp pm_wait         // error: show blank map, wait for key
+pm_fetch_ok:
 
-        // ── 3. Parse 5 temperatures from RXBUF ───────────────────────────
+        // ── 3. Parse 6 temperatures from RXBUF ───────────────────────────
         lda #<RXBUF
         sta ZP_PTR
         lda #>RXBUF
@@ -1103,7 +1109,29 @@ pm_parse:
         cpx #6
         bne pm_parse
 
-        // ── 4. Install sprite pointers ────────────────────────────────────
+        // ── 3b. Parse 6 icon indices (lines 7-12 of /temps response) ─────────
+        ldx #0
+pm_icon_parse:
+        ldy #0
+        lda (ZP_PTR),y
+        cmp #$30            // must be '0'..'6'
+        bcc pmi_default
+        cmp #$37
+        bcs pmi_default
+        sec
+        sbc #$30
+        jmp pmi_store
+pmi_default:
+        lda #2              // fallback: cloudy
+pmi_store:
+        sta city_icons,x
+        jsr ptl_adv         // advance past digit
+        jsr ptl_adv         // advance past newline
+        inx
+        cpx #6
+        bne pm_icon_parse
+
+        // ── 4. Install temperature sprite pointers ────────────────────────────
         lda #$70
         sta $43F8
         lda #$71
@@ -1116,6 +1144,12 @@ pm_parse:
         sta $43FC
         lda #$75
         sta $43FD
+
+        // ── 4b. Initialise alternating display state ─────────────────────────
+        // (icon sprites already copied to $4400 by copy_koala_to_ram at startup)
+        lda #0
+        sta pm_show_icons   // start with temperatures visible
+        jsr pm_set_alt_timer
 
         // ── 5. Render sprites ─────────────────────────────────────────────
         ldx #5
@@ -1152,6 +1186,10 @@ pm_pos_loop:
         sta $D015
 
 pm_wait:
+        jsr pm_check_alt_timer  // 3-second flip: swap temp/icon sprites
+        bcc pmw_no_flip
+        jsr pm_swap_sprites
+pmw_no_flip:
         jsr $FFE4
         bne pmw_key
         lda loop_mode           // no key — check loop timer
@@ -1427,16 +1465,34 @@ copy_koala_to_ram:
         sta ZP_TMPH
         jsr ckr_1000
 
-        // ── Step 5: bitmap → $6000 ────────────────────────────────────────
-        lda #<koala_data
+        // ── Step 4c: icon sprites → $4400 BEFORE bitmap overwrites $6000–$7FFF ─
+        // icon_sprite_data lives in PRG RAM inside $6000–$7FFF; bitmap copy
+        // (step 5) would clobber it, so we must copy the icons first.
+        lda #<icon_sprite_data
         sta ZP_PTR
-        lda #>koala_data
+        lda #>icon_sprite_data
         sta ZP_PTRH
         lda #$00
         sta ZP_TMP
-        lda #$60
+        lda #$44
         sta ZP_TMPH
-        jsr ckr_8000
+        ldy #0
+ckisp0: lda (ZP_PTR),y
+        sta (ZP_TMP),y
+        iny
+        bne ckisp0
+        inc ZP_PTRH
+        inc ZP_TMPH
+        ldy #0
+ckisp1: lda (ZP_PTR),y
+        sta (ZP_TMP),y
+        iny
+        bne ckisp1
+
+        // ── Step 5: bitmap → $6000 ────────────────────────────────────────
+        // Use restore_koala_bitmap so the splash-overlap fix (blanking of
+        // bottom rows 22-24) is applied here too.
+        jsr restore_koala_bitmap
 
         lda koala_data + 10000
         sta map_bgcolor
@@ -1453,7 +1509,7 @@ copy_koala_to_ram:
 // The Koala source bytes at these offsets get corrupted after PRG load,
 // so restore_koala_sram copies $00 instead. Write $50 unconditionally.
 patch_screen_sram:
-        lda #$50
+        lda #$55            // c1=green, c2=green — prevents black artefact
         sta $430D
         sta $430E
         sta $430F
@@ -1475,28 +1531,57 @@ patch_screen_sram:
 // Border is red while radar is active.
 // ─────────────────────────────────────────────────────────────────────────────
 page_radar:
-        // ── 1. Switch to multicolour bitmap mode in VIC bank 1 ───────────
+        // ── 1. Blank display; switch to text mode (bank 0) for loading screen ──
         lda $D011
-        and #$EF                // blank display while switching
-        sta $D011
-        lda $DD00
-        and #$FC
-        ora #$02                // VIC bank 1 ($4000-$7FFF)
-        sta $DD00
-        lda $D011
-        ora #$20                // bitmap mode
+        and #$CF                // clear DEN (bit4) + bitmap (bit5)
         sta $D011
         lda $D016
-        ora #$10                // multicolour
+        and #$EF                // clear multicolour
         sta $D016
-        lda #$08                // screen@$4000, bitmap@$6000
+        lda $DD00
+        and #$FC
+        ora #$03                // VIC bank 0
+        sta $DD00
+        lda #$16                // screen@$0400, ROM charset
         sta $D018
         lda #RED
         sta $D020               // red border = radar active
         lda #0
         sta $D010
         sta $D015               // sprites off
-        // display stays blank until first frame is flipped in (pr_flip_frame re-enables it)
+
+        // Clear text screen ($0400-$07E7) without touching color RAM
+        lda #$20
+        ldx #0
+pr_cls_lp:
+        sta $0400,x
+        sta $0500,x
+        sta $0600,x
+        inx
+        bne pr_cls_lp
+        ldx #$E8            // last 232 bytes ($0700-$07E7)
+pr_cls_tail:
+        sta $0700,x
+        inx
+        bne pr_cls_tail
+        lda #12
+        sta ZP_ROW
+        lda #8
+        sta ZP_COL
+        lda #CYAN
+        sta ZP_DCOL
+        lda #<str_loading_radar
+        sta ZP_PTR
+        lda #>str_loading_radar
+        sta ZP_PTRH
+        jsr pstr
+        // Re-enable display — user sees "LOADING RADAR IMAGES...."
+        lda $D011
+        ora #$10
+        sta $D011
+        // Signal pr_flip_frame to do the one-time VIC mode switch on the first frame
+        lda #1
+        sta pr_first_frame
 
         // ── 2. Frame loop ─────────────────────────────────────────────────
 pr_frame:
@@ -1693,6 +1778,30 @@ pts_mm_done:
 // barely visible and far less jarring than the old-bitmap/new-palette artifact.
 // Uses self-modifying hi-bytes; resets them on each call.
 pr_flip_frame:
+        // ── First frame only: switch to multicolour bitmap mode in VIC bank 1 ──
+        // Replaces the "LOADING RADAR IMAGES...." message with the first frame.
+        // On frames 2+ this block is skipped to avoid the blank-flash from DEN=0.
+        lda pr_first_frame
+        beq pr_ff_skip_init
+        lda #0
+        sta pr_first_frame
+        lda $D011
+        and #$EF                // blank briefly during one-time switch
+        sta $D011
+        lda $DD00
+        and #$FC
+        ora #$02                // VIC bank 1 ($4000-$7FFF)
+        sta $DD00
+        lda $D011
+        ora #$20                // bitmap mode
+        sta $D011
+        lda $D016
+        ora #$10                // multicolour
+        sta $D016
+        lda #$08                // screen@$4000, bitmap@$6000
+        sta $D018
+pr_ff_skip_init:
+
         // ── Bitmap: $8000→$6000 (8000 bytes = 31 pages + 64 bytes) ──
         lda #$80
         sta pr_bs+2
@@ -1819,6 +1928,82 @@ clt_no:
         clc
         rts
 
+// pm_set_alt_timer — set alternating display timer to now + 180 jiffies (3 s)
+pm_set_alt_timer:
+        clc
+        lda $A2
+        adc #$B4            // 180 = $B4
+        sta pm_alt_a2
+        lda $A1
+        adc #$00
+        sta pm_alt_a1
+        lda $A0
+        adc #$00
+        sta pm_alt_a0
+        rts
+
+// pm_check_alt_timer — C=1 if 3-second deadline reached (auto-resets); C=0 if not yet
+pm_check_alt_timer:
+        lda $A0
+        cmp pm_alt_a0
+        bcc pcat_no
+        bne pcat_yes
+        lda $A1
+        cmp pm_alt_a1
+        bcc pcat_no
+        bne pcat_yes
+        lda $A2
+        cmp pm_alt_a2
+        bcc pcat_no
+pcat_yes:
+        jsr pm_set_alt_timer    // reset for next 3-second cycle
+        sec
+        rts
+pcat_no:
+        clc
+        rts
+
+// pm_swap_sprites — toggle between temperature labels and weather icon sprites
+pm_swap_sprites:
+        lda pm_show_icons
+        eor #1
+        sta pm_show_icons
+        bne pss_icons
+        // restore temperature sprite pointers ($70–$75) and white colors
+        lda #$70
+        sta $43F8
+        lda #$71
+        sta $43F9
+        lda #$72
+        sta $43FA
+        lda #$73
+        sta $43FB
+        lda #$74
+        sta $43FC
+        lda #$75
+        sta $43FD
+        lda #WHITE
+        sta $D027
+        sta $D028
+        sta $D029
+        sta $D02A
+        sta $D02B
+        sta $D02C
+        rts
+pss_icons:
+        // set per-city icon pointers + per-icon colours
+        ldx #5
+pss_icon_loop:
+        lda city_icons,x
+        tay
+        lda icon_ptrs,y
+        sta $43F8,x
+        lda icon_colors,y
+        sta $D027,x
+        dex
+        bpl pss_icon_loop
+        rts
+
 // update_loop_hint — rewrite "ON "/"OFF" at row 1, col 32 ($0448-$044A)
 // "1=CUR 2=FCST 3=RPT 4=MAP 5=RDR 6=LP ON  "
 //  col 0                                 ^36
@@ -1884,6 +2069,26 @@ restore_koala_bitmap:
         lda #$60
         sta ZP_TMPH
         jsr ckr_8000
+        // Falls through into blank_map_bottom_rows.
+// blank_map_bottom_rows — zero out bitmap rows 22-24 ($7B80-$7F3F).
+//
+// Why: koala_data lives at PRG $21BB-$48CB.  show_splash copies the splash
+// bitmap to $4000-$5F3F, which clobbers koala_data bytes at PRG $4000-$48CB
+// (i.e. bitmap offsets 7749-7999 plus the screen/colour RAM tail).  After
+// show_splash returns, ckr_8000 still reads from those clobbered addresses
+// and writes garbage (e.g. screen-RAM remnants $50/$6F) to bitmap memory at
+// $7E45-$7F3F.  The KLA file has all zeros for bitmap rows 22-24, so it is
+// safe to unconditionally blank those rows after every bitmap restore.
+blank_map_bottom_rows:
+        lda #0
+        ldx #0
+bmbr_lp:
+        sta $7B80,x
+        sta $7C80,x
+        sta $7D80,x
+        sta $7E80,x         // last loop ends at $7F7F (in free VIC-bank-1 area)
+        inx
+        bne bmbr_lp
         rts
 
 ckr_8000:
@@ -3069,6 +3274,9 @@ srxpg_end_other:
         sec
         rts
 
+str_loading_radar: .text "LOADING RADAR IMAGES...."
+                   .byte 0
+
 str_more:      .text " -- SPACE=NEXT PAGE -- "
                .byte 0
 str_more_last: .text " -- SPACE=PAGE 1 --    "
@@ -3410,11 +3618,23 @@ str_colon:
 spr_ptr_lo: .byte <$5C00, <$5C40, <$5C80, <$5CC0, <$5D00, <$5D40
 spr_ptr_hi: .byte >$5C00, >$5C40, >$5C80, >$5CC0, >$5D00, >$5D40
 
+// Icon sprite VIC bank 1 pointers: icon N at $4400+N*$40, ptr = ($4400-$4000+N*$40)/64
+icon_ptrs:  .byte $10, $11, $12, $13, $14, $15, $16, $17
+
+// Sprite colour per icon index (0=sun..7=moon)
+icon_colors: .byte YELLOW, WHITE, WHITE, LGREY, WHITE, WHITE, YELLOW, WHITE
+
 // Sprite top-left positions
 spr_x_tab:  .byte 172, 198, 161, 209, 123, 221  // Utrecht, Maastricht, Den Helder, Groningen, Middelburg, Enschede
 spr_y_tab:  .byte 142, 206,  89,  69, 176, 131
 
 temp_values: .byte 0, 0, 0, 0, 0, 0         // fetched temperatures (signed, one per city)
+city_icons:  .byte 2, 2, 2, 2, 2, 2         // icon index per city (0-6), from server
+pm_show_icons: .byte 0                       // 0=showing temp sprites, 1=showing icon sprites
+pr_first_frame: .byte 0                      // 1=first radar frame pending (do VIC mode switch)
+pm_alt_a0:   .byte 0                         // alternating timer target (24-bit jiffy, hi)
+pm_alt_a1:   .byte 0                         //                                           mid
+pm_alt_a2:   .byte 0                         //                                           lo
 map_bgcolor: .byte 0                         // Koala background colour, set by copy_koala_to_ram
 loop_mode:   .byte 0                         // 0=off, 1=on
 to_active:   .byte 0                         // 1 = timeout is armed
@@ -3485,3 +3705,332 @@ koala_data:
 // ─────────────────────────────────────────────────────────────────────────────
 splash_data:
     .import binary "splash.kla"
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Weather icon sprite bitmaps — 8 × 64 bytes (24×21 hires, single-colour)
+// Copied to VIC bank 1 $4400–$45FF at page_map init time.
+// Index: 0=sun  1=partly  2=cloudy  3=fog  4=rain  5=snow  6=thunder  7=moon
+// ─────────────────────────────────────────────────────────────────────────────
+icon_sprite_data:
+// ── 0 SUN ────────────────────────────────────────────────────────────────────────────
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$18,$00
+        .byte $00,$18,$00
+        .byte $02,$00,$40
+        .byte $01,$81,$80
+        .byte $00,$3C,$00
+        .byte $00,$7E,$00
+        .byte $00,$FF,$00
+        .byte $1E,$FF,$78
+        .byte $00,$FF,$00
+        .byte $00,$7E,$00
+        .byte $00,$BD,$80
+        .byte $03,$00,$C0
+        .byte $02,$18,$40
+        .byte $00,$18,$00
+        .byte $00,$18,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00  // padding
+// ── 1 PARTLY CLOUDY ────────────────────────────────────────────────────────────
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$80,$00
+        .byte $04,$10,$00
+        .byte $01,$C0,$00
+        .byte $0A,$20,$00
+        .byte $02,$6E,$00
+        .byte $01,$D1,$00
+        .byte $04,$20,$80
+        .byte $01,$C0,$C0
+        .byte $03,$00,$30
+        .byte $02,$00,$10
+        .byte $02,$00,$10
+        .byte $01,$00,$30
+        .byte $00,$7F,$C0
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00  // padding
+// ── 2 CLOUDY ────────────────────────────────────────────────────────────────────────────────
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$18,$00
+        .byte $00,$7E,$00
+        .byte $00,$FF,$00
+        .byte $01,$FF,$C0
+        .byte $07,$FF,$E0
+        .byte $0F,$FF,$F0
+        .byte $0F,$FF,$F8
+        .byte $0F,$FF,$F8
+        .byte $07,$FF,$F0
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00  // padding
+// ── 3 FOG ─────────────────────────────────────────────────────────────────────────────
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $03,$FF,$C0
+        .byte $00,$00,$00
+        .byte $0F,$FF,$F0
+        .byte $00,$00,$00
+        .byte $01,$FF,$A0
+        .byte $07,$FF,$E0
+        .byte $00,$00,$00
+        .byte $0F,$FF,$F0
+        .byte $00,$00,$00
+        .byte $03,$FF,$C0
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00  // padding
+// ── 4 RAIN ─────────────────────────────────────────────────────────────────────────────
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$18,$00
+        .byte $00,$7E,$00
+        .byte $00,$FF,$00
+        .byte $01,$FF,$C0
+        .byte $07,$FF,$E0
+        .byte $0F,$FF,$F0
+        .byte $0F,$FF,$F8
+        .byte $0F,$FF,$F8
+        .byte $07,$FF,$F0
+        .byte $00,$00,$00
+        .byte $01,$11,$00
+        .byte $00,$88,$80
+        .byte $00,$44,$40
+        .byte $00,$22,$20
+        .byte $00,$11,$10
+        .byte $00,$08,$88
+        .byte $00  // padding
+// ── 5 SNOW ─────────────────────────────────────────────────────────────────────────────
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$18,$00
+        .byte $00,$7E,$00
+        .byte $00,$FF,$00
+        .byte $01,$FF,$C0
+        .byte $07,$FF,$E0
+        .byte $0F,$FF,$F0
+        .byte $0F,$FF,$F8
+        .byte $0F,$FF,$F8
+        .byte $07,$FF,$F0
+        .byte $01,$01,$00
+        .byte $03,$83,$80
+        .byte $01,$01,$00
+        .byte $00,$00,$00
+        .byte $00,$10,$00
+        .byte $00,$38,$00
+        .byte $00,$10,$00
+        .byte $00  // padding
+// ── 6 THUNDER ───────────────────────────────────────────────────────────────────────
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$18,$00
+        .byte $00,$7E,$00
+        .byte $00,$FF,$00
+        .byte $01,$FF,$C0
+        .byte $07,$FF,$E0
+        .byte $07,$FF,$E0
+        .byte $03,$FF,$C0
+        .byte $00,$00,$00
+        .byte $00,$04,$00
+        .byte $00,$08,$00
+        .byte $00,$10,$00
+        .byte $00,$3C,$00
+        .byte $00,$02,$00
+        .byte $00,$04,$00
+        .byte $00,$08,$00
+        .byte $00,$00,$00
+        .byte $00  // padding
+// ── 7 MOON ─────────────────────────────────────────────────────────────────────────────
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$08,$00
+        .byte $00,$3F,$80
+        .byte $00,$7F,$00
+        .byte $00,$F8,$00
+        .byte $01,$F0,$00
+        .byte $03,$C0,$00
+        .byte $03,$C0,$00
+        .byte $03,$C0,$00
+        .byte $03,$E0,$00
+        .byte $03,$C0,$00
+        .byte $03,$C0,$00
+        .byte $01,$F0,$00
+        .byte $00,$F8,$00
+        .byte $00,$7F,$00
+        .byte $00,$3F,$80
+        .byte $00,$08,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00  // padding
+// ── 1 Partly Cloudy — asterisk sun (upper-left) + cloud (lower-right) ────
+        .byte $00,$00,$00
+        .byte $14,$00,$00
+        .byte $08,$00,$00
+        .byte $14,$00,$00
+        .byte $0F,$8F,$00
+        .byte $14,$DF,$80
+        .byte $08,$FF,$C0
+        .byte $14,$FF,$C0
+        .byte $0F,$BF,$E0
+        .byte $00,$7F,$E0
+        .byte $00,$7F,$E0
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00  // padding
+// ── 2 Cloudy — three-bump cloud shape ────────────────────────────────────
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $38,$E0,$00
+        .byte $7D,$F0,$00
+        .byte $FF,$FE,$00
+        .byte $FF,$FF,$00
+        .byte $FF,$FF,$80
+        .byte $7F,$FF,$80
+        .byte $3F,$FF,$80
+        .byte $1F,$FF,$80
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00  // padding
+// ── 3 Fog — four alternating-width horizontal stripes ────────────────────
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $7F,$FF,$E0
+        .byte $7F,$FF,$E0
+        .byte $00,$00,$00
+        .byte $3F,$FF,$E0
+        .byte $3F,$FF,$E0
+        .byte $00,$00,$00
+        .byte $7F,$FF,$E0
+        .byte $7F,$FF,$E0
+        .byte $00,$00,$00
+        .byte $3F,$FF,$E0
+        .byte $3F,$FF,$E0
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00  // padding
+// ── 4 Rainy — compact cloud + two rows of diagonal streaks ───────────────
+        .byte $00,$00,$00
+        .byte $03,$C0,$00
+        .byte $07,$F8,$00
+        .byte $0F,$FC,$00
+        .byte $0F,$FC,$00
+        .byte $1F,$FE,$00
+        .byte $0F,$FC,$00
+        .byte $07,$F8,$00
+        .byte $00,$00,$00
+        .byte $10,$00,$00
+        .byte $08,$20,$80
+        .byte $04,$10,$40
+        .byte $02,$08,$20
+        .byte $01,$04,$10
+        .byte $00,$00,$00
+        .byte $08,$20,$80
+        .byte $04,$10,$40
+        .byte $02,$08,$20
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00  // padding
+// ── 5 Snowy — compact cloud + two rows of asterisk snowflakes ────────────
+        .byte $00,$00,$00
+        .byte $03,$C0,$00
+        .byte $07,$F8,$00
+        .byte $0F,$FC,$00
+        .byte $0F,$FC,$00
+        .byte $1F,$FE,$00
+        .byte $0F,$FC,$00
+        .byte $07,$F8,$00
+        .byte $00,$00,$00
+        .byte $11,$10,$00
+        .byte $3B,$B8,$00
+        .byte $11,$10,$00
+        .byte $00,$00,$00
+        .byte $08,$88,$00
+        .byte $1D,$DC,$00
+        .byte $08,$88,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00  // padding
+// ── 6 Thunder — compact cloud + prominent zigzag lightning bolt ──────────
+        .byte $00,$00,$00
+        .byte $03,$C0,$00
+        .byte $07,$F8,$00
+        .byte $0F,$FC,$00
+        .byte $0F,$FC,$00
+        .byte $1F,$FE,$00
+        .byte $0F,$FC,$00
+        .byte $07,$F8,$00
+        .byte $00,$00,$00
+        .byte $00,$3E,$00
+        .byte $00,$7C,$00
+        .byte $00,$F8,$00
+        .byte $01,$FF,$80
+        .byte $00,$F8,$00
+        .byte $01,$F0,$00
+        .byte $03,$E0,$00
+        .byte $07,$C0,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00  // padding
