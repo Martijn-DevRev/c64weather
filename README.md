@@ -170,7 +170,7 @@ The Netherlands rendered in VIC-II multicolour bitmap mode. Hardware sprites ove
 
 ![Animated rain radar](screenshots/5.radar.png)
 
-A multi-frame rain-radar slideshow served by the proxy, which fetches, scales, and converts Buienradar radar PNGs to C64 Koala format on the fly. Each frame is displayed with a timestamp sprite. Press any key to return to the main loop.
+A multi-frame rain-radar slideshow showing the last hour situation, served by the proxy, which fetches, scales, and converts Buienradar radar PNGs to C64 Koala format on the fly. Each frame is displayed with a timestamp sprite. Press any key to return to the main loop.
 
 ---
 
