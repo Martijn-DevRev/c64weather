@@ -1,6 +1,6 @@
 # C64U Weather
 
-A live weather display program for the **Commodore 64**, built on the **Ultimate II+/U64** cartridge's UCI Network Target. The C64 opens a raw TCP socket through the cartridge firmware, makes a plain HTTP/1.0 GET request to a local Python proxy server, and renders weather data, an interactive Netherlands temperature map, and an animated rain-radar slideshow — all in native C64 graphics.
+A live weather display program for the **Commodore 64 Ultimate**, leveraging the Ultimate Control Interface and it's Network Target (also present on the Ultimate series mainboards and the **Ultimate II+** cartridge). The C64 opens a raw TCP socket through the UCI, makes a plain HTTP/1.0 GET request to a local Python proxy server, and renders weather data, an interactive Netherlands temperature map, and an animated rain-radar slideshow — all in native C64 graphics.
 
 ![Splash screen](splash_preview.png)
 
@@ -8,14 +8,14 @@ A live weather display program for the **Commodore 64**, built on the **Ultimate
 
 ## Features
 
-- **Splash screen** — Buienradar-branded boot screen with logo, QR code linking to this repo, and credits
+- **Server setup** — enter a custom hostname and port from the setup screen or use the default hosted option at c64.runstoprestore.nl
 - **Current conditions** — live temperature, humidity, wind, precipitation, pressure, visibility
 - **5-day forecast** — min/max temp, rain chance, sun hours, wind direction and Beaufort scale
 - **Weather report** — full-text bulletin from Buienradar, paginated across screens
 - **Temperature map** — Netherlands outline in VIC-II multicolour bitmap mode with hardware sprites showing city temperatures (Groningen, Amsterdam, Utrecht, Rotterdam, Maastricht)
 - **Animated radar** — multi-frame rain-radar slideshow fetched from the proxy, shown with frame timestamps as sprites
 - **Auto-cycle mode** — hands-free carousel through all screens
-- **Server editor** — enter a custom hostname and port from the setup screen
+
 
 ---
 
@@ -38,7 +38,7 @@ data.buienradar.nl  (~32 KB JSON)   +   api.buienradar.nl  (radar PNG frames)
 
 The proxy is required for two reasons:
 
-1. **SSL** — the C64 cannot perform TLS; the proxy terminates it.
+1. **SSL** — the C64U cannot perform TLS via the network target; the proxy terminates it.
 2. **Format translation** — Buienradar returns large JSON and PNG images. The proxy extracts relevant fields, word-wraps to 38 columns, and converts radar frames to C64 Koala (multicolour bitmap) format.
 
 ---
@@ -55,9 +55,6 @@ The proxy is required for two reasons:
 | `requirements.txt` | Python dependencies for the proxy server |
 | `Dockerfile` | Docker image for running the proxy |
 | `KickAss.jar` | KickAssembler v5.25 — assembles `.asm` → `.prg` |
-| `V1/` | Original V1 source (reference only) |
-
-> **Note:** `.kla` binary assets (`netherlands_map_blank.kla`, `splash.kla`) are generated locally and excluded from the repository via `.gitignore`. Run `make_splash.py` to regenerate `splash.kla`. The Netherlands map `.kla` was created from `netherlands_map.png` using the included conversion pipeline.
 
 ---
 
@@ -147,7 +144,7 @@ Shown after the splash while the program verifies connectivity.
 
 ## Proxy server API
 
-All responses are plain ASCII, max 38 characters wide. Every successful response ends with `OK` on its own line.
+All responses are plain ASCII, max 38 characters wide. 
 
 | Endpoint | Description |
 |----------|-------------|
@@ -177,7 +174,6 @@ PRECIP  : 0.0 MM
 PRESSUR : 1018.4 HPA
 VISIBIL : 35000.0 M
 --------------------------------------
-OK
 ```
 
 ### Example — `/temps`
@@ -188,7 +184,6 @@ AMSTERDAM:15
 UTRECHT:16
 ROTTERDAM:14
 MAASTRICHT:16
-OK
 ```
 
 ---
@@ -417,6 +412,10 @@ The back-arrow key (PETSCII `$5F`) maps to screen code `$1F` (not `$5F`). The `s
 
 Code by **Martijn Bosschaart** (martijn@runstoprestore.nl) — and Claude.  
 Weather data by [Buienradar.nl](https://www.buienradar.nl).  
-QR code links to: [https://github.com/Martijn-DevRev/c64weather](https://github.com/Martijn-DevRev/c64weather)
+UCI library documentation by Xander Mol (https://github.com/xahmol)
 
-Licensed under GPL-3.0.
+Licensed under the GNU General Public License v3.0
+
+The code can be used freely as long as you retain a notice describing original source and author.
+
+THE PROGRAMS ARE DISTRIBUTED IN THE HOPE THAT THEY WILL BE USEFUL, BUT WITHOUT ANY WARRANTY. USE THEM AT YOUR OWN RISK!
