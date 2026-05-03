@@ -561,9 +561,10 @@ _TEMPS_CITIES = [
     ("Twente",     6290),
 ]
 
-# Map Dutch weatherdescription → icon index (0–7).
-# Indices match the 8 icon sprites in weather.asm:
-#   0=sun  1=partlycloudy  2=cloudy  3=fog  4=rainy  5=snowy  6=thunder  7=moon
+# Map Dutch weatherdescription → icon index (0–8).
+# Indices match the 9 icon sprites in weather.asm:
+#   0=sun  1=partlycloudy  2=cloudy  3=fog  4=rainy  5=snowy  6=thunder
+#   7=moon (clear at night)  8=partly-night (moon + cloud)
 _DESC_TO_ICON: dict[str, int] = {
     # clear
     "Vrijwel onbewolkt (zonnig/helder)":                              0,
@@ -599,14 +600,17 @@ def _is_night() -> bool:
 
 
 def _desc_to_icon(desc: str, night: bool = False) -> int:
-    """Map a Dutch weatherdescription string to an icon index (0–7).
+    """Map a Dutch weatherdescription string to an icon index (0–8).
 
     Falls back to cloudy (2) for unknown descriptions.
-    Clear sky at night returns 7 (moon) instead of 0 (sun).
+    At night, sun (0) → moon (7) and partly-cloudy (1) → partly-night (8).
     """
     idx = _DESC_TO_ICON.get(desc.strip(), 2)
-    if idx == 0 and night:
-        return 7
+    if night:
+        if idx == 0:
+            return 7
+        if idx == 1:
+            return 8
     return idx
 
 
@@ -614,7 +618,7 @@ def build_temps(data: dict) -> str:
     """Return temperatures then icon indices for each city, in _MAP_CITIES order.
 
     Format: 6 temperature lines (signed integers) followed by 6 icon-index
-    lines (0–7).  The C64 reads the first 6 as temperatures and the next 6 as
+    lines (0–8).  The C64 reads the first 6 as temperatures and the next 6 as
     weather icon indices for the alternating sprite display.
     """
     measurements = data.get("actual", {}).get("stationmeasurements", [])

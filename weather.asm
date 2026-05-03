@@ -54,11 +54,12 @@
 //   $4000–$43E7  Screen RAM for multicolour bitmap mode (1000 B)
 //   $43E8–$43F7  (gap — unused)
 //   $43F8–$43FD  Sprite pointers (6 sprites: $70–$75 → sprite data at $5C00–$5D7F)
-//   $4400–$45FF  Icon sprite data: 8 × 64 B weather icon sprites (copied at runtime)
+//   $4400–$463F  Icon sprite data: 9 × 64 B weather icon sprites (copied at runtime)
 //                  Icon 0=$4400($10) sun,  1=$4440($11) partly, 2=$4480($12) cloudy
 //                  Icon 3=$44C0($13) fog,  4=$4500($14) rain,   5=$4540($15) snow
 //                  Icon 6=$4580($16) thunder, 7=$45C0($17) moon
-//   $45C0–$5BFF  (free in VIC bank 1)
+//                  Icon 8=$4600($18) partly-night (moon + cloud)
+//   $4640–$5BFF  (free in VIC bank 1)
 //   $5C00–$5D7F  Sprite data: 6 × 64 B temperature sprites
 //                  Spr 0=$5C00 (ptr=$70), 1=$5C40 ($71), 2=$5C80 ($72)
 //                  Spr 3=$5CC0 ($73),     4=$5D00 ($74), 5=$5D40 ($75)
@@ -1114,9 +1115,9 @@ pm_parse:
 pm_icon_parse:
         ldy #0
         lda (ZP_PTR),y
-        cmp #$30            // must be '0'..'6'
+        cmp #$30            // must be '0'..'8'
         bcc pmi_default
-        cmp #$37
+        cmp #$39
         bcs pmi_default
         sec
         sbc #$30
@@ -1468,6 +1469,7 @@ copy_koala_to_ram:
         // ── Step 4c: icon sprites → $4400 BEFORE bitmap overwrites $6000–$7FFF ─
         // icon_sprite_data lives in PRG RAM inside $6000–$7FFF; bitmap copy
         // (step 5) would clobber it, so we must copy the icons first.
+        // 9 sprites × 64 bytes = 576 bytes = 2 full pages + 64-byte tail.
         lda #<icon_sprite_data
         sta ZP_PTR
         lda #>icon_sprite_data
@@ -1488,6 +1490,14 @@ ckisp1: lda (ZP_PTR),y
         sta (ZP_TMP),y
         iny
         bne ckisp1
+        inc ZP_PTRH
+        inc ZP_TMPH
+        ldy #0
+ckisp2: lda (ZP_PTR),y          // 64-byte tail for sprite 8 ($4600-$463F)
+        sta (ZP_TMP),y
+        iny
+        cpy #64
+        bne ckisp2
 
         // ── Step 5: bitmap → $6000 ────────────────────────────────────────
         // Use restore_koala_bitmap so the splash-overlap fix (blanking of
@@ -3619,10 +3629,10 @@ spr_ptr_lo: .byte <$5C00, <$5C40, <$5C80, <$5CC0, <$5D00, <$5D40
 spr_ptr_hi: .byte >$5C00, >$5C40, >$5C80, >$5CC0, >$5D00, >$5D40
 
 // Icon sprite VIC bank 1 pointers: icon N at $4400+N*$40, ptr = ($4400-$4000+N*$40)/64
-icon_ptrs:  .byte $10, $11, $12, $13, $14, $15, $16, $17
+icon_ptrs:  .byte $10, $11, $12, $13, $14, $15, $16, $17, $18
 
-// Sprite colour per icon index (0=sun..7=moon)
-icon_colors: .byte YELLOW, WHITE, WHITE, LGREY, WHITE, WHITE, YELLOW, WHITE
+// Sprite colour per icon index (0=sun..7=moon, 8=partly-night)
+icon_colors: .byte YELLOW, WHITE, WHITE, LGREY, WHITE, WHITE, YELLOW, WHITE, WHITE
 
 // Sprite top-left positions
 spr_x_tab:  .byte 172, 198, 161, 209, 123, 221  // Utrecht, Maastricht, Den Helder, Groningen, Middelburg, Enschede
@@ -3707,9 +3717,10 @@ splash_data:
     .import binary "splash.kla"
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Weather icon sprite bitmaps — 8 × 64 bytes (24×21 hires, single-colour)
-// Copied to VIC bank 1 $4400–$45FF at page_map init time.
-// Index: 0=sun  1=partly  2=cloudy  3=fog  4=rain  5=snow  6=thunder  7=moon
+// Weather icon sprite bitmaps — 9 × 64 bytes (24×21 hires, single-colour)
+// Copied to VIC bank 1 $4400–$463F at page_map init time.
+// Index: 0=sun  1=partly  2=cloudy  3=fog  4=rain  5=snow  6=thunder
+//        7=moon  8=partly-night
 // ─────────────────────────────────────────────────────────────────────────────
 icon_sprite_data:
 // ── 0 SUN ────────────────────────────────────────────────────────────────────────────
@@ -3892,6 +3903,29 @@ icon_sprite_data:
         .byte $00,$7F,$00
         .byte $00,$3F,$80
         .byte $00,$08,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00  // padding
+// ── 8 PARTLY CLOUDY NIGHT — chunky crescent moon (upper-left) + overlapping cloud
+        .byte $00,$00,$00
+        .byte $0F,$00,$00
+        .byte $1F,$80,$00
+        .byte $38,$00,$00
+        .byte $30,$00,$00
+        .byte $30,$00,$00
+        .byte $30,$04,$00
+        .byte $30,$0F,$80
+        .byte $38,$1F,$E0
+        .byte $1F,$3F,$F0
+        .byte $0F,$FF,$F8
+        .byte $00,$FF,$F8
+        .byte $00,$FF,$F8
+        .byte $00,$7F,$F0
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
+        .byte $00,$00,$00
         .byte $00,$00,$00
         .byte $00,$00,$00
         .byte $00,$00,$00
