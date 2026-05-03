@@ -1,6 +1,7 @@
 .DS_Store
 __pycache__/
 *.pyc
+*.kla
 koala_preview*.png
 splash_preview.png
 weather.sym
