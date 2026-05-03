@@ -1,6 +1,6 @@
 # C64U Weather
 
-A live weather display program for the **Commodore 64 Ultimate**, leveraging the Ultimate Control Interface and it's Network Target (also present on the Ultimate series mainboards and the **Ultimate II+** cartridge). The C64 opens a raw TCP socket through the UCI, makes a plain HTTP/1.0 GET request to a local Python proxy server, and renders weather data, an interactive Netherlands temperature map, and an animated rain-radar slideshow — all in native C64 graphics.
+A live weather display program for the **Commodore 64 Ultimate**, leveraging the Ultimate Control Interface and it's Network Target (also present on the **Ultimate** series mainboards and the **Ultimate 64 & II+** cartridges). The C64 opens a raw TCP socket through the UCI, makes a plain HTTP/1.0 GET request to a local Python proxy server, and renders weather data, an interactive Netherlands temperature map, and an animated rain-radar slideshow — all in native C64 graphics.
 
 ![Splash screen](splash_preview.png)
 
