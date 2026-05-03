@@ -162,7 +162,7 @@ Full-text weather bulletin from Buienradar, word-wrapped to 38 columns. If the r
 
 ![Temperature map](screenshots/4.map.png)
 
-The Netherlands rendered in VIC-II multicolour bitmap mode. Hardware sprites overlay the current temperature for five cities: Groningen, Amsterdam, Utrecht, Rotterdam, and Maastricht. Sprite digit bitmaps are built at runtime from a built-in 5×7 pixel font.
+The Netherlands rendered in VIC-II multicolour bitmap mode. Hardware sprites overlay the current temperature for six weather stations: Utrecht, Maastricht, Den Helder, Groningen, Vlissingen, and Twente. Sprite digit bitmaps are built at runtime from a built-in 5×7 pixel font.
 
 ---
 
@@ -405,7 +405,7 @@ Each temperature label is a single-colour 24×21 pixel hardware sprite built at 
 - Digits are read from a built-in 5×7 pixel font table
 - A negative-sign prefix is rendered for sub-zero values
 - Sprite data is written to `$5C00–$5D7F` (VIC bank 1); sprite pointers at `$43F8–$43FD`
-- Five cities are mapped to fixed screen positions and sprite slots 0–4
+- Six stations are mapped to fixed screen positions and sprite slots 0–5: Utrecht, Maastricht, Den Helder, Groningen, Vlissingen, Twente
 
 ---
 
