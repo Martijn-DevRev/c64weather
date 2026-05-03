@@ -64,7 +64,7 @@ The proxy is required for two reasons:
 - Commodore 64 with **Ultimate II+** or **U64** cartridge
 - Ultimate firmware **≥ 3.10** (for the Network Target, `$03`)
 
-### Proxy server
+### Proxy server (if you want to run it locally, c64.runstoprestore.nl provides hosted server)
 - Python **3.10** or newer
 - Dependencies: `pip install -r requirements.txt` (Pillow, requests, qrcode)
 
