@@ -111,11 +111,17 @@ On the setup screen press **E** to edit the default server address and port. Ent
 
 ### Splash screen
 
-Shown at boot. Displays the Buienradar logo, credits, a scannable QR code for this GitHub repository, and the author's email. **Press Space** to continue.
+![Splash screen](screenshots/splashscreen.png)
+
+Shown at boot. Displays the Buienradar logo, a credits line, and a scannable QR code that links directly to this GitHub repository. **Press Space** to continue to the setup screen.
+
+---
 
 ### Setup screen
 
-Shown after the splash while the program verifies connectivity.
+![Setup screen](screenshots/0.setup.png)
+
+Shown after the splash while the program verifies connectivity. Displays the UCI cartridge status, the device's LAN IP, the configured server hostname and port, and the result of a live connection test. Press **E** to edit the server address, or **← (back-arrow)** to return here from any screen.
 
 | Line | Content |
 |------|---------|
@@ -125,6 +131,48 @@ Shown after the splash while the program verifies connectivity.
 | PORT | Port of the proxy server |
 | STATUS | `TESTING CONNECTION…` → `OK – SERVER READY` or `FAIL – NO RESPONSE` |
 | SERVER SAYS | First line returned by the server's `/` endpoint |
+
+---
+
+### 1 — Current conditions
+
+![Current conditions](screenshots/1.current.png)
+
+Live weather snapshot for the configured station: temperature, feels-like, humidity, wind direction and Beaufort force, gusts, precipitation, air pressure, and visibility. Data is fetched fresh on every keypress.
+
+---
+
+### 2 — 5-day forecast
+
+![5-day forecast](screenshots/2.forecast.png)
+
+Tabular overview of the coming five days showing minimum and maximum temperature, rain chance, sun percentage, and wind. Followed by a one-line summary for each day.
+
+---
+
+### 3 — Weather report
+
+![Weather report](screenshots/3.report.png)
+
+Full-text weather bulletin from Buienradar, word-wrapped to 38 columns. If the report is longer than one screen, **press Space** to advance to the next page.
+
+---
+
+### 4 — Temperature map
+
+![Temperature map](screenshots/4.map.png)
+
+The Netherlands rendered in VIC-II multicolour bitmap mode. Hardware sprites overlay the current temperature for five cities: Groningen, Amsterdam, Utrecht, Rotterdam, and Maastricht. Sprite digit bitmaps are built at runtime from a built-in 5×7 pixel font.
+
+---
+
+### 5 — Animated rain radar
+
+![Animated rain radar](screenshots/5.radar.png)
+
+A multi-frame rain-radar slideshow served by the proxy, which fetches, scales, and converts Buienradar radar PNGs to C64 Koala format on the fly. Each frame is displayed with a timestamp sprite. Press any key to return to the main loop.
+
+---
 
 ### Key mappings
 
