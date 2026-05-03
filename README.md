@@ -125,7 +125,7 @@ Shown after the splash while the program verifies connectivity. Displays the UCI
 
 | Line | Content |
 |------|---------|
-| UCI INTERFACE | `OK ($C9)` when the cartridge is detected |
+| UCI INTERFACE | `OK ($C9)` when the Control Interface is enabled |
 | C64U IP | LAN IP of the cartridge as reported by firmware |
 | SERVER | Hostname of the proxy server |
 | PORT | Port of the proxy server |
