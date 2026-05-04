@@ -1,0 +1,35 @@
+# C64 build artefacts — not needed in the image
+*.asm
+*.prg
+*.kla
+*.sym
+KickAss.jar
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Dev / test scripts
+sprite_test.*
+make_splash.py
+debug_poll.py
+
+# Asset sources
+icons/
+screenshots/
+*.png
+*.svg
+*.jpg
+V1/
+
+# Git & docs
+.git/
+.gitignore
+README.md
+LICENSE
+CURSOR_MCP_CONFIG.md
+
+# Local env files
+.env
+.env.*

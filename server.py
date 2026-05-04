@@ -29,6 +29,7 @@ import http.server
 import io
 import json
 import logging
+import os
 import sys
 import time
 import urllib.request
@@ -37,6 +38,10 @@ from datetime import datetime
 BUIENRADAR_URL = "https://data.buienradar.nl/2.0/feed/json"
 DEFAULT_PORT = 8888
 DEFAULT_STATION_ID = 6260  # De Bilt (central NL reference station)
+
+# Station ID: env var wins over the argparse default so gunicorn workers
+# pick it up without any CLI plumbing.
+STATION_ID = int(os.environ.get("STATION_ID", DEFAULT_STATION_ID))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -656,70 +661,93 @@ def build_help() -> str:
 
 
 # ---------------------------------------------------------------------------
-# HTTP handler
+# WSGI application (used by gunicorn)
+# ---------------------------------------------------------------------------
+
+_STATUS_PHRASES = {200: "OK", 404: "Not Found", 502: "Bad Gateway"}
+
+
+def application(environ, start_response):
+    """WSGI entry point — gunicorn runs this directly."""
+    path = environ.get("PATH_INFO", "/").split("?")[0].rstrip("/") or "/"
+    client = environ.get("REMOTE_ADDR", "-")
+
+    def resp_text(body: str, status: int = 200):
+        encoded = body.encode("ascii", errors="replace")
+        phrase = _STATUS_PHRASES.get(status, "Error")
+        start_response(f"{status} {phrase}", [
+            ("Content-Type", "text/plain; charset=ascii"),
+            ("Content-Length", str(len(encoded))),
+        ])
+        log.info("%-15s  GET %s  %d", client, path, status)
+        return [encoded]
+
+    def resp_binary(data: bytes, status: int = 200):
+        phrase = _STATUS_PHRASES.get(status, "Error")
+        start_response(f"{status} {phrase}", [
+            ("Content-Type", "application/octet-stream"),
+            ("Content-Length", str(len(data))),
+        ])
+        log.info("%-15s  GET %s  %d  (%d B)", client, path, status, len(data))
+        return [data]
+
+    if path == "/radar":
+        return resp_binary(_radar.next_frame())
+
+    if path in ("/current", "/forecast", "/report", "/temps"):
+        try:
+            log.info("Fetching Buienradar…")
+            data = fetch_buienradar()
+            log.info("Buienradar fetch OK")
+        except Exception as exc:
+            log.error("Buienradar fetch failed: %s", exc)
+            return resp_text(f"ERROR: FETCH FAILED: {exc}\n", 502)
+
+        if path == "/current":
+            return resp_text(build_current(data, STATION_ID))
+        if path == "/forecast":
+            return resp_text(build_forecast(data))
+        if path == "/report":
+            return resp_text(build_report(data))
+        if path == "/temps":
+            return resp_text(build_temps(data))
+
+    if path == "/":
+        return resp_text(build_help())
+
+    return resp_text("ERROR: UNKNOWN ENDPOINT\n", 404)
+
+
+# ---------------------------------------------------------------------------
+# stdlib HTTP handler — used only for local development (python3 server.py)
 # ---------------------------------------------------------------------------
 
 class WeatherHandler(http.server.BaseHTTPRequestHandler):
 
-    station_id: int = DEFAULT_STATION_ID
-
-    def log_message(self, fmt, *args):  # silence default request log
+    def log_message(self, fmt, *args):
         log.info("%-15s  %s", self.client_address[0], fmt % args)
 
-    def send_text(self, body: str, status: int = 200) -> None:
-        encoded = body.encode("ascii", errors="replace")
-        self.send_response(status)
-        self.send_header("Content-Type", "text/plain; charset=ascii")
-        self.send_header("Content-Length", str(len(encoded)))
-        self.end_headers()
-        self.wfile.write(encoded)
-
-    def send_binary(self, data: bytes, status: int = 200) -> None:
-        self.send_response(status)
-        self.send_header("Content-Type", "application/octet-stream")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
-
     def do_GET(self):
-        path = self.path.split("?")[0].rstrip("/") or "/"
+        # Delegate to the WSGI app so dev and prod share one code path.
+        status_holder: list = []
+        headers_holder: list = []
 
-        if path == "/radar":
-            self.send_binary(_radar.next_frame())
-            return
+        def start_response(status, headers, exc_info=None):
+            status_holder.append(status)
+            headers_holder.extend(headers)
 
-        if path in ("/current", "/forecast", "/report", "/temps"):
-            try:
-                log.info("Fetching Buienradar…")
-                data = fetch_buienradar()
-                log.info("Buienradar fetch OK")
-            except Exception as exc:
-                log.error("Buienradar fetch failed: %s", exc)
-                self.send_text(f"ERROR: FETCH FAILED: {exc}\n", 502)
-                return
+        body_iter = application({
+            "PATH_INFO": self.path,
+            "REMOTE_ADDR": self.client_address[0],
+        }, start_response)
+        body = b"".join(body_iter)
 
-            if path == "/current":
-                body = build_current(data, self.station_id)
-                self.send_text(body)
-            elif path == "/forecast":
-                body = build_forecast(data)
-                self.send_text(body)
-            elif path == "/report":
-                body = build_report(data)
-                self.send_text(body)
-            elif path == "/temps":
-                body = build_temps(data)
-                self.send_text(body)
-            return
-
-        elif path == "/":
-            body = build_help()
-        else:
-            body = "ERROR: UNKNOWN ENDPOINT\n"
-            self.send_text(body, 404)
-            return
-
-        self.send_text(body)
+        code = int(status_holder[0].split()[0]) if status_holder else 200
+        self.send_response(code)
+        for name, value in headers_holder:
+            self.send_header(name, value)
+        self.end_headers()
+        self.wfile.write(body)
 
 
 # ---------------------------------------------------------------------------
@@ -727,14 +755,19 @@ class WeatherHandler(http.server.BaseHTTPRequestHandler):
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    """Direct-run entry point for local development (not used in Docker)."""
     parser = argparse.ArgumentParser(description="C64U Weather intermediary server")
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT,
+    parser.add_argument("--port", type=int,
+                        default=int(os.environ.get("PORT", DEFAULT_PORT)),
                         help=f"TCP port to listen on (default: {DEFAULT_PORT})")
-    parser.add_argument("--station", type=int, default=DEFAULT_STATION_ID,
+    parser.add_argument("--station", type=int,
+                        default=STATION_ID,
                         help=f"Buienradar station ID for /current (default: {DEFAULT_STATION_ID} = De Bilt)")
     args = parser.parse_args()
 
-    WeatherHandler.station_id = args.station
+    # Allow CLI --station to override the env var for dev convenience.
+    import sys as _sys
+    _sys.modules[__name__].STATION_ID = args.station
 
     server = http.server.HTTPServer(("", args.port), WeatherHandler)
     log.info("C64U Weather server listening on http://0.0.0.0:%d", args.port)

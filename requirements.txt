@@ -1,2 +1,2 @@
-Pillow
-psutil
+gunicorn==25.3.0
+Pillow==12.2.0

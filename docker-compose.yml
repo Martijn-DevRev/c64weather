@@ -1,0 +1,23 @@
+services:
+  c64weather:
+    build: .
+    image: c64weather:latest
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    environment:
+      # Buienradar station ID for /current (default: De Bilt = 6260)
+      STATION_ID: "6260"
+    # Gunicorn writes heartbeats to /dev/shm, so the root fs can be read-only.
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m,mode=1777   # fallback tmp if any library needs it
+    # Minimal Linux capabilities — this app needs no special kernel privileges.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # Soft resource limits to contain runaway processes.
+    mem_limit: 256m
+    mem_reservation: 64m
+    cpus: "1.0"
