@@ -1560,19 +1560,25 @@ page_radar:
         sta $D010
         sta $D015               // sprites off
 
-        // Clear text screen ($0400-$07E7) without touching color RAM
+        // Clear text screen rows 2-24 ($0450-$07E7) without touching the
+        // title/menu bar (rows 0-1, $0400-$044F) or color RAM.
         lda #$20
+        ldx #$50
+pr_cls_lp1:
+        sta $0400,x         // $0450-$04FF (176 bytes: X=$50..$FF)
+        inx
+        bne pr_cls_lp1
         ldx #0
-pr_cls_lp:
-        sta $0400,x
-        sta $0500,x
-        sta $0600,x
+pr_cls_lp2:
+        sta $0500,x         // $0500-$05FF (256 bytes)
+        sta $0600,x         // $0600-$06FF (256 bytes)
         inx
-        bne pr_cls_lp
-        ldx #$E8            // last 232 bytes ($0700-$07E7)
+        bne pr_cls_lp2
+        ldx #0
 pr_cls_tail:
-        sta $0700,x
+        sta $0700,x         // $0700-$07E7 (232 bytes)
         inx
+        cpx #$E8
         bne pr_cls_tail
         lda #12
         sta ZP_ROW
