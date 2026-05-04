@@ -64,9 +64,9 @@ The proxy is required for two reasons:
 - Commodore 64 with **Ultimate II+** or **U64** cartridge
 - Ultimate firmware **≥ 3.10** (for the Network Target, `$03`)
 
-### Proxy server (if you want to run it locally, c64.runstoprestore.nl provides hosted server)
+### Proxy server *(self-hosting only — not needed if you use the default hosted server)*
 - Python **3.10** or newer
-- Dependencies: `pip install -r requirements.txt` (Pillow, requests, qrcode)
+- Dependencies: `pip install -r requirements.txt` (Pillow, gunicorn)
 
 ### Rebuilding the PRG
 - Java runtime (for KickAssembler)
@@ -76,34 +76,37 @@ The proxy is required for two reasons:
 
 ## Quick start
 
-### 1. Run the proxy server
+> **Just want to run it?** Load `weather.prg` on your C64 and use the default hosted server — no proxy setup required. Skip straight to step 2.
+
+### 1. (Optional) Run your own proxy server
+
+A public proxy is already running at **c64.runstoprestore.nl** and is pre-configured as the default server address. You only need to run `server.py` yourself if you want to host it locally, change the weather station, or run it without an internet dependency.
+
+**Option A — plain Python:**
 
 ```bash
 cd C64U_Weather
 pip install -r requirements.txt
-python3 server.py
+python3 server.py           # listens on port 8888 by default
+python3 server.py --port 9000 --station 6260   # override port / station
 ```
 
-Default: listens on **port 8064**. Override with `--port`:
+**Option B — Docker (hardened, recommended for self-hosting):**
 
 ```bash
-python3 server.py --port 9000
+cd C64U_Weather
+docker compose up -d --build
 ```
 
-Or run in Docker:
-
-```bash
-docker build -t c64weather .
-docker run -p 8064:8064 c64weather
-```
+Listens on port **8888**. Set `STATION_ID` in `docker-compose.yml` to use a different Buienradar station.
 
 ### 2. Load the PRG on the C64
 
 Copy `weather.prg` to a USB stick, mount via the Ultimate menu, and `LOAD`/`RUN` it, or use the Ultimate's built-in file browser to run it directly.
 
-### 3. Configure the server address
+### 3. Configure the server address *(only if running your own proxy)*
 
-On the setup screen press **E** to edit the default server address and port. Enter the LAN IP of the machine running `server.py` followed by `:port`.
+On the setup screen press **E** to edit the server address and port. Enter the LAN IP of the machine running `server.py` followed by `:port`. If you are using the default hosted server this step is not needed.
 
 ---
 
