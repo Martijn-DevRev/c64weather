@@ -165,7 +165,7 @@ Full-text weather bulletin from Buienradar, word-wrapped to 38 columns. If the r
 The Netherlands rendered in VIC-II multicolour bitmap mode. Hardware sprites overlay six weather stations: Utrecht, Maastricht, Den Helder, Groningen, Vlissingen, and Twente. Each sprite alternates every 3 seconds between two states:
 
 - **Temperature** — current temperature in degrees Celsius, built at runtime from a 5×7 pixel font (negative values get a leading minus sign).
-- **Weather-state icon** — one of nine 24×21 pixel icons representing current conditions: sun, partly cloudy, cloudy, fog, rain, snow, thunder, moon (clear nights), or partly-cloudy-night (moon behind cloud). Icons are colourised per type (yellow sun/thunder, white clouds/rain/snow/moon, light grey fog).
+- **Weather-state icon** — one of nine 24×21 pixel icons representing current conditions: sun, partly cloudy, cloudy, fog, rain, snow, thunder, moon (clear nights), or partly-cloudy-night (moon behind cloud). Icons are colourised per type (yellow sun, white clouds/rain/snow/thunder/moon, light grey fog).
 
 ---
 

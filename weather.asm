@@ -3632,7 +3632,7 @@ spr_ptr_hi: .byte >$5C00, >$5C40, >$5C80, >$5CC0, >$5D00, >$5D40
 icon_ptrs:  .byte $10, $11, $12, $13, $14, $15, $16, $17, $18
 
 // Sprite colour per icon index (0=sun..7=moon, 8=partly-night)
-icon_colors: .byte YELLOW, WHITE, WHITE, LGREY, WHITE, WHITE, YELLOW, WHITE, WHITE
+icon_colors: .byte YELLOW, WHITE, WHITE, LGREY, WHITE, WHITE, WHITE, WHITE, WHITE
 
 // Sprite top-left positions
 spr_x_tab:  .byte 172, 198, 161, 209, 123, 221  // Utrecht, Maastricht, Den Helder, Groningen, Middelburg, Enschede
