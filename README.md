@@ -87,7 +87,7 @@ A public proxy is already running at **c64.runstoprestore.nl** and is pre-config
 ```bash
 cd C64U_Weather
 pip install -r requirements.txt
-python3 server.py           # listens on port 8888 by default
+python3 server.py           # listens on port 8064 by default
 python3 server.py --port 9000 --station 6260   # override port / station
 ```
 
@@ -98,7 +98,7 @@ cd C64U_Weather
 docker compose up -d --build
 ```
 
-Listens on port **8888**. Set `STATION_ID` in `docker-compose.yml` to use a different Buienradar station.
+Listens on port **9064**. Set `STATION_ID` in `docker-compose.yml` to use a different Buienradar station.
 
 ### 2. Load the PRG on the C64
 
