@@ -670,7 +670,7 @@ _STATUS_PHRASES = {200: "OK", 404: "Not Found", 502: "Bad Gateway"}
 def application(environ, start_response):
     """WSGI entry point — gunicorn runs this directly."""
     path = environ.get("PATH_INFO", "/").split("?")[0].rstrip("/") or "/"
-    client = environ.get("REMOTE_ADDR", "-")
+    client = (environ.get("HTTP_X_FORWARDED_FOR") or environ.get("REMOTE_ADDR", "-")).split(",")[0].strip()
 
     def resp_text(body: str, status: int = 200):
         encoded = body.encode("ascii", errors="replace")
