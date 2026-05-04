@@ -444,7 +444,10 @@ def _png_to_koala_bytes(canvas, fixed_bg=None, fixed_c1=None, fixed_c2=None, fix
 # Radar frame cache
 # ---------------------------------------------------------------------------
 
-RADAR_URL   = 'https://api.buienradar.nl/image/1.0/RadarMapNL?w=500&h=512'
+# history=12 + forecast=0 gives 12 historical frames spaced 5 minutes apart,
+# covering the most recent ~55 minutes (i.e. the last hour) of radar activity.
+# The default endpoint returns only 6 frames (~30 minutes).
+RADAR_URL   = 'https://api.buienradar.nl/image/1.0/RadarMapNL?w=500&h=512&history=12&forecast=0'
 RADAR_TTL   = 15 * 60   # re-fetch GIF every 15 minutes
 
 

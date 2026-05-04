@@ -1511,7 +1511,7 @@ ckisp2: lda (ZP_PTR),y          // 64-byte tail for sprite 8 ($4600-$463F)
 // ─────────────────────────────────────────────────────────────────────────────
 // Loop-mode timer helpers
 // C64 jiffy clock: $A0 (hi), $A1 (mid), $A2 (lo) — increments 60×/sec.
-// 10 seconds = 600 jiffies = $0258.
+// 12 seconds = 720 jiffies = $02D0.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // patch_screen_sram — hardcode known-bad screen RAM cells in bottom-right
@@ -1617,9 +1617,17 @@ pr_frame:
         sta ZP_PTR
         lda #>path_radar
         sta ZP_PTRH
+        // Arm a 10-second UCI timeout so a hung TCP/uci_wait_dav can't lock the
+        // radar forever (root cause of "stuck on loading radar images" hang).
+        // The radar's own loop_timer is also 10s so a single timed-out fetch
+        // simply consumes one radar slot — cycling continues normally.
+        jsr arm_timeout_10s
         jsr do_get_binary   // all data → buffers, display unchanged
+        php                 // preserve carry across disarm + restore-defaults
+        jsr disarm_timeout
 
-        // Restore defaults for other pages
+        // Restore defaults for other pages — must run on every iteration so
+        // the next page (map/etc.) writes its data to the correct addresses.
         lda #$60
         sta dgb_bmp_hi
         lda #$40
@@ -1631,11 +1639,20 @@ pr_frame:
         lda #$D0
         sta dgb_bg_hi
 
+        plp                 // restore carry from do_get_binary
+        bcs pr_fetch_failed
+
         // Flip: copy colors then bitmap — no blank, wipe is artifact-free
         jsr pr_flip_frame
         // Build and enable timestamp sprites from the freshly received HH/MM bytes
         jsr pr_setup_ts_sprites
+        jmp pr_after_flip
 
+pr_fetch_failed:
+        // Failed/timed-out fetch: keep showing the previous frame.  Fall
+        // through to the key/timer check so cycling and key handling still work.
+
+pr_after_flip:
         jsr $FFE4               // key pressed?
         bne pr_key
         lda loop_mode           // check loop timer
@@ -1910,14 +1927,14 @@ pr_done:
         jsr restore_char_mode
         rts
 
-// set_loop_timer — record target time = now + 600 jiffies
+// set_loop_timer — record target time = now + 720 jiffies (12 seconds)
 set_loop_timer:
         clc
         lda $A2
-        adc #$58                // 600 & $FF
+        adc #$D0                // 720 & $FF
         sta loop_end_a2
         lda $A1
-        adc #$02                // 600 >> 8
+        adc #$02                // 720 >> 8
         sta loop_end_a1
         lda $A0
         adc #$00
