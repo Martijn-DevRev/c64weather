@@ -36,7 +36,7 @@ import urllib.request
 from datetime import datetime
 
 BUIENRADAR_URL = "https://data.buienradar.nl/2.0/feed/json"
-DEFAULT_PORT = 8888
+DEFAULT_PORT = 8064
 DEFAULT_STATION_ID = 6260  # De Bilt (central NL reference station)
 
 # Station ID: env var wins over the argparse default so gunicorn workers
