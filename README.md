@@ -61,7 +61,7 @@ The proxy is required for two reasons:
 ## Requirements
 
 ### C64 hardware
-- Commodore 64 with **Ultimate II+** or **U64** cartridge
+- Commodore 64U or Commodore 64 with **Ultimate II+** or **U64** cartridge
 - Ultimate firmware **≥ 3.10** (for the Network Target, `$03`)
 
 ### Proxy server *(self-hosting only — not needed if you use the default hosted server)*
