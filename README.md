@@ -98,7 +98,7 @@ cd C64U_Weather
 docker compose up -d --build
 ```
 
-Listens on port **9064**. Set `STATION_ID` in `docker-compose.yml` to use a different Buienradar station.
+Listens on port **8064**. Set `STATION_ID` in `docker-compose.yml` to use a different Buienradar station.
 
 ### 2. Load the PRG on the C64
 
