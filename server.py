@@ -509,21 +509,21 @@ class _RadarCache:
             # "run<YYYYMMDDhhmm>" — this is the time of the LAST (most recent) frame.
             # Fall back to rounding now() if the pattern is not found.
             import datetime as _dt
+            from zoneinfo import ZoneInfo as _ZoneInfo
+            _AMS = _ZoneInfo("Europe/Amsterdam")
             _m = _re.search(r'run(\d{12})', final_url)
             if _m:
-                _last = _dt.datetime.strptime(_m.group(1), '%Y%m%d%H%M')
-                # CDN timestamp is UTC; convert to local time using the actual
-                # current offset (accounts for DST correctly)
-                _utc_offset = _dt.datetime.now() - _dt.datetime.utcnow()
-                _last = _last + _utc_offset
+                # CDN timestamp is UTC; convert to Amsterdam local time (handles DST)
+                _last_utc = _dt.datetime.strptime(_m.group(1), '%Y%m%d%H%M').replace(tzinfo=_dt.timezone.utc)
+                _last = _last_utc.astimezone(_AMS).replace(tzinfo=None)
                 # Snap to the nearest 5-minute boundary (frames are always on :00/:05/:10 etc.)
                 _last = _last.replace(minute=(_last.minute // 5) * 5, second=0, microsecond=0)
-                log.info("Radar run time from CDN URL: %s (local)", _last.strftime('%H:%M'))
+                log.info("Radar run time from CDN URL: %s (Amsterdam)", _last.strftime('%H:%M'))
             else:
-                _now = _dt.datetime.now()
+                _now = _dt.datetime.now(tz=_AMS).replace(tzinfo=None)
                 _last = _now.replace(minute=(_now.minute // 5) * 5,
                                      second=0, microsecond=0)
-                log.info("Radar run time estimated from now: %s", _last.strftime('%H:%M'))
+                log.info("Radar run time estimated from now: %s (Amsterdam)", _last.strftime('%H:%M'))
             n_frames = len(canvases)
             timestamps = [
                 _last - _dt.timedelta(minutes=5 * (n_frames - 1 - i))
