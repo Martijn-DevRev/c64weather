@@ -705,6 +705,26 @@ _blocklist = _BlockList()
 
 _STATUS_PHRASES = {200: "OK", 403: "Forbidden", 404: "Not Found", 502: "Bad Gateway"}
 
+# Sun favicon (32×32 + 16×16 ICO, embedded as base64 to avoid file-path dependencies)
+import base64 as _b64
+_FAVICON_ICO = _b64.b64decode(
+    "AAABAAIAEBAAAAAAIAB0AgAAJgAAACAgAAAAACAAOQEAAJoCAACJUE5HDQoaCgAAAA1JSERSAAAAEAAAABAIBgAAAB"
+    "/z/2EAAAI7SURBVHicbZNNSFRRGIafc+eOMwwIgiNupFIJ2lSL2rVShqI/WvWD4craBW2LAhdBm2jlQiKKIDAxk"
+    "AiyFpWhtigsRi0rKyoCoxxqGqGpuTPzxjlzr43YC5dz7jnf3/t974EIBiQ8ye5At0lpllN2df/R+QixaP9faISY"
+    "W5/QrCx5jZMWGOsU3dXDc1nH8TXPXc1xxByiYh1YxscDGglscTzDd3dzdClLe1SV58I8okqV6yS4oVky1sFk+E"
+    "qJi+RJOobbCTRHLwke4tHpktzEq/ESxhikLN34vGOJRT5wBjhMI61UeMo3zrOf4xS4Z7YyZOnYiozj1YFHMzHT"
+    "zm/149PGLTaylxagAgTAKwLy7DYneKBp4myjHPZ+NXSFc3RyljRFRBIBPhUK+LyhSJn1po+lyN7XDAdIsdOF+s4"
+    "ELzlKi+tJkirGnQf4NBHQQZJ5+vSeQZZJ4BH4Low18hBVPAxN2DlHzvXwETHW8YcxGthAmepaCteYYjM7SBFQIh"
+    "4msI5lPhFnkX10MUVAnBIVL1SWr+ma4vjFSV5T4idxEgQ0UHb1fCHOR0bNMe7QScFsIme28GO1+mbo0QJDGmCXh"
+    "slpEukx0hjSZUb1mTY9J+NsI9nLVmClOktGC04Lvc7gEmkNclrDXNBV9rizLN16i/SCHvXXVPzvkWRptzINnWvc"
+    "PdA8k45iOHIrdyd7K38bYE0Tw9fmvvu0KktOE05SK1TrsRIhem1Wnq7xtvN2ElB0QrI4SNVlrZvdX/eJE/vq0M7"
+    "TAAAAAElFTkSuQmCCiVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAABAElEQVR4nN2XwQ3DMAhFAXme"
+    "HjpRR+tEOXQhqkpN5DrBfBM7TYuUS4T/fyAHO0S/GvogfT17daQPzr8BaIfWhgH0bd4ToqYl5Qu+ECMLW80tLf"
+    "YWllAR85oGewLWQr2vK+LbdvdqBXANADW2QGoFhAA0N79uJExriG5zQD3z4j3SKRgAMg9CCAIAm7fmEQCwVNEg"
+    "mud7XUjVIRH8/lsi0UFhFZmOqvTrHWCjSHEXzgMlGzJQTNhAkohotzwCAT6q8MQbx7GguxeCCJwFjJjnm6jlNJ"
+    "w1QsexOue5dx9ANEyAHreh3VoK3geRH5Q5Z8htW0FhK0fo7JNwdMhwh7MDPAEi94c6gG52GwAAAABJRU5ErkJggg=="
+)
+
 
 def application(environ, start_response):
     """WSGI entry point — gunicorn runs this directly."""
@@ -734,6 +754,14 @@ def application(environ, start_response):
         ])
         log.info("%-15s  GET %s  %d  (%d B)", client, path, status, len(data))
         return [data]
+
+    if path == "/favicon.ico":
+        start_response("200 OK", [
+            ("Content-Type",   "image/x-icon"),
+            ("Content-Length", str(len(_FAVICON_ICO))),
+            ("Cache-Control",  "public, max-age=86400"),
+        ])
+        return [_FAVICON_ICO]
 
     if path == "/radar":
         return resp_binary(_radar.next_frame())
