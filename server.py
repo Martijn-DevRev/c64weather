@@ -31,6 +31,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
 import urllib.request
 from datetime import datetime
@@ -661,16 +662,59 @@ def build_help() -> str:
 
 
 # ---------------------------------------------------------------------------
+# IP blocklist — blocks IPs that hit non-existent pages more than twice
+# ---------------------------------------------------------------------------
+
+BLOCK_THRESHOLD = 2        # strikes before blocking (block on the 3rd 404)
+BLOCK_DURATION  = 5 * 60   # seconds to block (5 minutes)
+
+
+class _BlockList:
+    def __init__(self):
+        self._lock    = threading.Lock()
+        self._strikes: dict[str, int]   = {}   # ip → 404 count
+        self._blocked: dict[str, float] = {}   # ip → expiry timestamp
+
+    def is_blocked(self, ip: str) -> bool:
+        with self._lock:
+            exp = self._blocked.get(ip)
+            if exp is None:
+                return False
+            if time.time() < exp:
+                return True
+            # Block has expired — clean up and let them try again
+            del self._blocked[ip]
+            self._strikes.pop(ip, None)
+            return False
+
+    def record_miss(self, ip: str) -> None:
+        with self._lock:
+            self._strikes[ip] = self._strikes.get(ip, 0) + 1
+            if self._strikes[ip] > BLOCK_THRESHOLD:
+                self._blocked[ip] = time.time() + BLOCK_DURATION
+                log.warning("%-15s  BLOCKED for %ds after %d 404s",
+                            ip, BLOCK_DURATION, self._strikes[ip])
+
+
+_blocklist = _BlockList()
+
+
+# ---------------------------------------------------------------------------
 # WSGI application (used by gunicorn)
 # ---------------------------------------------------------------------------
 
-_STATUS_PHRASES = {200: "OK", 404: "Not Found", 502: "Bad Gateway"}
+_STATUS_PHRASES = {200: "OK", 403: "Forbidden", 404: "Not Found", 502: "Bad Gateway"}
 
 
 def application(environ, start_response):
     """WSGI entry point — gunicorn runs this directly."""
     path = environ.get("PATH_INFO", "/").split("?")[0].rstrip("/") or "/"
     client = (environ.get("HTTP_X_FORWARDED_FOR") or environ.get("REMOTE_ADDR", "-")).split(",")[0].strip()
+
+    if _blocklist.is_blocked(client):
+        log.info("%-15s  BLOCKED  GET %s  dropped", client, path)
+        start_response("403 Forbidden", [("Content-Length", "0")])
+        return [b""]
 
     def resp_text(body: str, status: int = 200):
         encoded = body.encode("ascii", errors="replace")
@@ -715,6 +759,7 @@ def application(environ, start_response):
     if path == "/":
         return resp_text(build_help())
 
+    _blocklist.record_miss(client)
     return resp_text("ERROR: UNKNOWN ENDPOINT\n", 404)
 
 
